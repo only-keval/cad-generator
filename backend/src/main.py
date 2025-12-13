@@ -1,4 +1,5 @@
 from llmclient.gemini import GeminiClient
+from llmclient.ollama import OllamaClient
 from agent.orchestrator import ModelAgentOrchestrator
 from agent.planner_service import ModelPlanner
 from agent.codegen_service import CqCodeGenerator
@@ -6,18 +7,13 @@ from agent.cadquery_executor import CadqueryExecutor
 from agent.code_fixer_service import CodeFixerService
 
 import cadquery as cq
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import os
 
 
 def load_api_context(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-
-    soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text(separator="")
-    return text
+        return f.read()
 
 
 if __name__ == "__main__":
@@ -25,8 +21,11 @@ if __name__ == "__main__":
         print("ERROR: .env file not found or could not be loaded.")
         os.exit(1)
 
-    llm = GeminiClient(api_key=os.environ["GEMINI_API_KEY"], model="gemini-2.5-flash-lite")
-    api_context = load_api_context("data/cadquery_api_reference.html")
+    llm = GeminiClient(api_key=os.environ["GEMINI_API_KEY"], model="gemini-2.5-flash")
+    # llm = GeminiClient(api_key=os.environ["GEMINI_API_KEY"], model="gemini-2.5-flash-lite")
+    # llm = OllamaClient(model="qwen2.5-coder:7b")
+    # llm = OllamaClient(model="mistral:latest")
+    api_context = load_api_context("data/cadquery_api_reference.txt")
 
     agent = ModelAgentOrchestrator(
         planner=ModelPlanner(llm, api_context),
@@ -43,5 +42,5 @@ if __name__ == "__main__":
         print(f"Last error: {error.error_type}: {error.message}")
     else:
         print("Model built successfully.")
-        model.exportStl("result.stl")
+        cq.exporters.export(model, "result.stl")
         print("Model exported to result.stl")

@@ -1,4 +1,5 @@
 from .cadquery_executor import ExecutionError
+from .codegen_service import process_code
 from llmclient.interfaces import LLMClient
 from typing import Literal, Optional
 from pydantic import BaseModel, Field, model_validator
@@ -69,6 +70,11 @@ class FixDiffModel(BaseModel):
     summary: str = Field(description="Brief description of the fix attempted")
 
 
+class RegenCodeResponseModel(BaseModel):
+    code: str = Field(description="The regenerated full corrected code")
+    fix_summary: str = Field(description="Brief description of the fix attempted")
+
+
 class CodeFixerService:
     def __init__(self, llm: LLMClient, api_context: str):
         self.llm = llm
@@ -109,6 +115,30 @@ class CodeFixerService:
         )
 
         return self.llm.generate_text(diagnosis_prompt)
+    
+
+    def regenerate_code(self, numbered_code: str, diagnosis: str) -> RegenCodeResponseModel:
+        regen_prompt = (
+            f"You have the numbered code:\n\n{numbered_code}\n\n"
+            f"and the diagnosis/fix plan:\n\n{diagnosis}\n\n"
+            f"Based on the diagnosis, regenerate the FULL corrected code and provide a brief summary of the fix.\n"
+            f"STRICT RULES:\n"
+            f"- Use CadQuery ONLY through the existing variable named 'cq' which is already available in the environment.\n"
+            f"- You can use safe python builtin functions and math functions via 'math'.\n"
+            f"- Use only functions and classes that actually exist in cadquery from the API reference. Do NOT hallucinate anything. Use ONLY the definitions specified in the api reference.\n"
+            f"- Do NOT import anything. No 'import cadquery', No 'import math', no imports of any kind as cq and math are already available in the execution environment.\n"
+            f"- Define a function build() with no arguments.\n"
+            f"- build() must return the final CadQuery Workplane or Shape.\n"
+            f"- Define ONLY the build() function, no additional code outside of it.\n"
+            f"- Do NOT export files.\n"
+            f"- Do NOT include comments.\n"
+            f"- Generate the code as text, DO NOT try to execute it yourself.\n"
+            f"- Output ONLY pure Python code for the corrected code. Remove the line number prefixes.\n"
+            f"- Provide a concise summary (1-2 sentences) of the fix attempted.\n"
+        )
+        response = self.llm.generate_structured(regen_prompt, RegenCodeResponseModel)
+        response.code = process_code(response.code)
+        return response
         
 
     def propose_diff(self, numbered_code: str, diagnosis: str) -> FixDiffModel:
@@ -230,7 +260,8 @@ class CodeFixerService:
         numbered_lines = [f"{i+1:04d}| {line}" for i, line in enumerate(original_code.splitlines())]
         numbered_code = "\n".join(numbered_lines)
         diagnosis = self.diagnose(plan, numbered_code, error, fix_history)
-        diff = self.propose_diff(numbered_code, diagnosis)
-        fixed_code = self.apply_diff(original_code, diff)
-        return fixed_code, diff.summary
+        # diff = self.propose_diff(numbered_code, diagnosis)
+        # fixed_code = self.apply_diff(original_code, diff)
+        regenRes = self.regenerate_code(numbered_code, diagnosis)
+        return regenRes.code, regenRes.fix_summary
     

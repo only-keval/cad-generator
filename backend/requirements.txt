@@ -1,0 +1,8 @@
+cadquery
+pydantic
+python-dotenv
+google-genai
+ollama
+groq
+beautifulsoup4
+requests

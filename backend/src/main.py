@@ -1,5 +1,6 @@
 from llmclient.gemini import GeminiClient
 from llmclient.ollama import OllamaClient
+from llmclient.groq import GroqClient
 from agent.orchestrator import ModelAgentOrchestrator
 from agent.planner_service import ModelPlanner
 from agent.codegen_service import CqCodeGenerator
@@ -21,10 +22,11 @@ if __name__ == "__main__":
         print("ERROR: .env file not found or could not be loaded.")
         os.exit(1)
 
-    llm = GeminiClient(api_key=os.environ["GEMINI_API_KEY"], model="gemini-2.5-flash")
+    # llm = GeminiClient(api_key=os.environ["GEMINI_API_KEY"], model="gemini-2.5-flash")
     # llm = GeminiClient(api_key=os.environ["GEMINI_API_KEY"], model="gemini-2.5-flash-lite")
     # llm = OllamaClient(model="qwen2.5-coder:7b")
     # llm = OllamaClient(model="mistral:latest")
+    llm = GroqClient(api_key=os.environ["GROQ_API_KEY"], model="openai/gpt-oss-120b")
     api_context = load_api_context("data/cadquery_api_reference.txt")
 
     agent = ModelAgentOrchestrator(

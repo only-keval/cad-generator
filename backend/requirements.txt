@@ -3,3 +3,4 @@ langgraph
 cadquery
 python-dotenv
 pydantic
+instructor

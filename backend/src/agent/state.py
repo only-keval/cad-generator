@@ -8,7 +8,6 @@ class ExecutionError:
 
 class AgentState(TypedDict):
     user_request: str
-    api_context: str
     plan: str
     code: str
     error: Optional[object]   # ExecutionError | None

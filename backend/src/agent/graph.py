@@ -5,6 +5,7 @@ from .state import AgentState
 from .executor import CadqueryExecutor, ExecutionError
 from .prompts import plan_prompt, codegen_prompt, diagnose_prompt, regen_prompt
 from .llm import llm, llm_structured
+from .rag import retrieve
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,9 @@ def node_plan(state: AgentState) -> dict:
 
 def node_codegen(state: AgentState) -> dict:
     print("Generating code...")
-    code = _clean(llm(codegen_prompt(state["plan"], state["api_context"])))
+    docs = retrieve(state["plan"])
+    print(f"Retrieved docs:\n{docs}\n")
+    code = _clean(llm(codegen_prompt(state["plan"], docs)))
     print(f"Generated code:\n{code}\n")
     return {"code": code}
 
@@ -68,10 +71,13 @@ def node_fix(state: AgentState) -> dict:
     error: ExecutionError = state["error"]
     error_text = f"Error on line {error.line}:\n{error.error_type}: {error.message}\n{error.traceback}"
 
+    docs = retrieve(f"{error.error_type}: {error.message}\n{state['code']}")
+    print(f"Retrieved docs:\n{docs}\n")
+
     diagnosis = llm(
         diagnose_prompt(
             plan=state["plan"],
-            api_context=state["api_context"],
+            api_context=docs,
             numbered_code=_number(state["code"]),
             error_text=error_text,
             fix_history=state["fix_history"],

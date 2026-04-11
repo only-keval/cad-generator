@@ -3,16 +3,17 @@ import cadquery as cq
 from dotenv import load_dotenv
 from agent.graph import app
 from agent.executor import ExecutionError
+from agent.rag import build_retriever
 
 if not load_dotenv():
     print("WARNING: .env not found, assuming env vars are already set.")
 
-api_context = open("data/cadquery_api_reference.txt", encoding="utf-8").read()
+build_retriever()  # fast after first run
+
 user_request = input("Enter your 3D model request: ")
 
 final = app.invoke({
     "user_request": user_request,
-    "api_context":  api_context,
     "plan":         "",
     "code":         "",
     "error":        None,

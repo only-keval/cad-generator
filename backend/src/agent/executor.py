@@ -81,6 +81,20 @@ class CadqueryExecutor:
 
         try:
             result = local_env["build"]()
+            if result is None:
+                return None, ExecutionError(
+                    stage="build",
+                    error_type="NoReturnValue",
+                    message="build() did not return anything.",
+                    traceback="", file=None, line=None, function="build",
+                )
+            if not isinstance(result, (cq.Shape, cq.Workplane)):
+                return None, ExecutionError(
+                    stage="build",
+                    error_type="InvalidReturnType",
+                    message=f"build() returned an object of type {type(result).__name__}, expected cq.Shape or cq.Workplane.",
+                    traceback="", file=None, line=None, function="build",
+                )
         except Exception as e:
             return None, _extract_error(e, "build")
 

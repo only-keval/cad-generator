@@ -6,6 +6,7 @@ from typing import Type, TypeVar
 import litellm
 import instructor
 from litellm import completion
+from litellm.exceptions import ServiceUnavailableError
 from pydantic import BaseModel
 
 litellm.set_verbose = False
@@ -37,6 +38,10 @@ def _is_rate_limit(exc: Exception) -> bool:
     )
 
 
+def _should_fallback(exc: Exception) -> bool:
+    return _is_rate_limit(exc) or isinstance(exc, ServiceUnavailableError)
+
+
 def llm(prompt: str) -> str:
     models = _models()
     for i, model in enumerate(models):
@@ -44,11 +49,11 @@ def llm(prompt: str) -> str:
             res = completion(model=model, messages=[{"role": "user", "content": prompt}])
             return res.choices[0].message.content or ""
         except Exception as exc:
-            if _is_rate_limit(exc) and i + 1 < len(models):
-                print(f"[llm] rate limited on '{model}', switching to '{models[i + 1]}'")
+            if _should_fallback(exc) and i + 1 < len(models):
+                print(f"[llm] fallback on '{model}', switching to '{models[i + 1]}'")
                 continue
             raise
-    raise RuntimeError("All models rate-limited.")
+    raise RuntimeError("All models failed.")
 
 
 def llm_structured(prompt: str, schema: Type[T], max_retries: int = 3) -> T:
@@ -62,8 +67,8 @@ def llm_structured(prompt: str, schema: Type[T], max_retries: int = 3) -> T:
                 max_retries=max_retries,
             )
         except Exception as exc:
-            if _is_rate_limit(exc) and i + 1 < len(models):
-                print(f"[llm] rate limited on '{model}', switching to '{models[i + 1]}'")
+            if _should_fallback(exc) and i + 1 < len(models):
+                print(f"[llm] fallback on '{model}', switching to '{models[i + 1]}'")
                 continue
             raise
-    raise RuntimeError("All models rate-limited.")
+    raise RuntimeError("All models failed.")

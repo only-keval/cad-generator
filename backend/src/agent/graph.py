@@ -51,7 +51,7 @@ def node_plan(state: AgentState) -> dict:
 def node_codegen(state: AgentState) -> dict:
     print("Generating code...")
     docs = retrieve(state["plan"])
-    print(f"Retrieved docs:\n{docs}\n")
+    # print(f"Retrieved docs:\n{docs}\n")
     code = _clean(llm(codegen_prompt(state["plan"], docs)))
     print(f"Generated code:\n{code}\n")
     return {"code": code}
@@ -72,7 +72,7 @@ def node_fix(state: AgentState) -> dict:
     error_text = f"Error on line {error.line}:\n{error.error_type}: {error.message}\n{error.traceback}"
 
     docs = retrieve(f"{error.error_type}: {error.message}\n{state['code']}")
-    print(f"Retrieved docs:\n{docs}\n")
+    # print(f"Retrieved docs:\n{docs}\n")
 
     diagnosis = llm(
         diagnose_prompt(
@@ -86,7 +86,8 @@ def node_fix(state: AgentState) -> dict:
     print(f"Diagnosis:\n{diagnosis}\n")
 
     print("Regenerating code...")
-    regen = llm_structured(regen_prompt(_number(state["code"]), diagnosis), RegenResponse)
+    docs = retrieve(diagnosis)
+    regen = llm_structured(regen_prompt(state["plan"], docs, _number(state["code"]), diagnosis), RegenResponse)
     fixed_code = _clean(regen.code)
     print(f"Fixed code:\n{fixed_code}\n")
 

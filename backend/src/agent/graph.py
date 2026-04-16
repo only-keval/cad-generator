@@ -5,7 +5,7 @@ from .state import AgentState
 from .executor import CadqueryExecutor, ExecutionError
 from .prompts import plan_prompt, codegen_prompt, diagnose_prompt, regen_prompt
 from .llm import llm, llm_structured
-from .rag import retrieve
+from .rag import retrieve, retrieve_for_plan, retrieve_for_error
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ def node_plan(state: AgentState) -> dict:
 
 def node_codegen(state: AgentState) -> dict:
     print("Generating code...")
-    docs = retrieve(state["plan"])
+    docs = retrieve_for_plan(state["plan"])
     # print(f"Retrieved docs:\n{docs}\n")
     code = _clean(llm(codegen_prompt(state["plan"], docs)))
     print(f"Generated code:\n{code}\n")
@@ -71,7 +71,7 @@ def node_fix(state: AgentState) -> dict:
     error: ExecutionError = state["error"]
     error_text = f"Error on line {error.line}:\n{error.error_type}: {error.message}\n{error.traceback}"
 
-    docs = retrieve(f"{error.error_type}: {error.message}\n{state['code']}")
+    docs = retrieve_for_error(state["code"], error.error_type, error.message)
     # print(f"Retrieved docs:\n{docs}\n")
 
     diagnosis = llm(
@@ -86,7 +86,7 @@ def node_fix(state: AgentState) -> dict:
     print(f"Diagnosis:\n{diagnosis}\n")
 
     print("Regenerating code...")
-    docs = retrieve(diagnosis)
+    docs = retrieve_for_plan(diagnosis)
     regen = llm_structured(regen_prompt(state["plan"], docs, _number(state["code"]), diagnosis), RegenResponse)
     fixed_code = _clean(regen.code)
     print(f"Fixed code:\n{fixed_code}\n")

@@ -14,6 +14,7 @@ user_request = input("Enter your 3D model request: ")
 
 final = app.invoke({
     "user_request": user_request,
+    "description": "",
     "plan":         "",
     "code":         "",
     "error":        None,

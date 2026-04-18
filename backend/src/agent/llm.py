@@ -15,7 +15,7 @@ for _name in ["litellm", "LiteLLM", "litellm.utils", "litellm.main", "httpx", "h
     logging.getLogger(_name).setLevel(logging.CRITICAL)
 
 T = TypeVar("T", bound=BaseModel)
-_instructor = instructor.from_litellm(completion)
+_instructor = instructor.from_litellm(completion, mode=instructor.Mode.JSON)
 
 
 def _model() -> str:

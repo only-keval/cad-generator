@@ -6,7 +6,7 @@ from typing import Type, TypeVar
 import litellm
 import instructor
 from litellm import completion
-from litellm.exceptions import ServiceUnavailableError
+from litellm.exceptions import ServiceUnavailableError, RateLimitError
 from pydantic import BaseModel
 
 litellm.set_verbose = False
@@ -35,11 +35,12 @@ def _is_rate_limit(exc: Exception) -> bool:
         getattr(exc, "status_code", None) == 429
         or "429" in str(exc)
         or "rate limit" in str(exc).lower()
+        or "ratelimit" in str(exc).lower()
     )
 
 
 def _should_fallback(exc: Exception) -> bool:
-    return _is_rate_limit(exc) or isinstance(exc, ServiceUnavailableError)
+    return _is_rate_limit(exc) or isinstance(exc, RateLimitError) or isinstance(exc, ServiceUnavailableError)
 
 
 def llm(prompt: str) -> str:

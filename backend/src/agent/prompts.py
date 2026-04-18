@@ -3,22 +3,33 @@ from typing import Optional
 
 def plan_prompt(user_request: str) -> str:
     return (
-        f"Design a precise 3D model for: {user_request}.\n"
+        f"Design a precise 3D model for: {user_request}.\n\n"
+
+        f"Use CadQuery coordinate system conventions:\n"
+        f"- +Z is up (vertical direction)\n"
+        f"- XY plane is the ground/base plane\n"
+        f"- +X is right, +Y is forward\n"
+        f"- Always use axis-based directions (e.g., '+Z', '-X'), avoid ambiguous terms like 'above' unless tied to axes\n\n"
+
         f"Step 1: Describe the object geometrically.\n"
         f"- Break the object into simple primitives (box, cylinder, sphere, etc.).\n"
-        f"- For each primitive, specify approximate dimensions in millimeters.\n"
-        f"- Describe relative sizes, rotations, and orientations of shapes. Use words like 'larger', 'smaller', 'rotated', 'aligned', 'above', 'below', 'parallel', 'perpendicular', 'vertical', 'horizontal' etc.\n"
-        f"- Specify the spatial relationship between primitives (position, alignment, offsets, orientation).\n"
-        f"- Specify the positions and dimensions of elements relative and proportional to each other, only specifying numbers for one base element and calculating the rest from that.\n"
-        f"- You may use specific points, edges or faces of a shape as reference for where to place other elements and what their dimensions are.\n"
-        f"- Keep the model as simple as possible. Avoid unnecessary complexity.\n"
-        f"- Describe the overall shape clearly enough for a CAD engineer to understand.\n\n"
+        f"- Define a base primitive anchored at origin (0,0,0).\n"
+        f"- Specify approximate dimensions in millimeters.\n"
+        f"- Describe orientations using axes (e.g., 'cylinder aligned along Z-axis').\n"
+        f"- Specify spatial relationships using coordinates, offsets, or references to faces/edges.\n"
+        f"- Define positions relative to the base primitive whenever possible.\n"
+        f"- Keep the model simple and avoid unnecessary complexity.\n\n"
+
         f"Step 2: Provide a step-by-step plan to build the object in CadQuery.\n"
-        f"- Each step should correspond to creating or modifying a primitive using CadQuery operations (extrude, fillet, cut, union, etc.).\n"
-        f"- Include information on relative positions and dimensions in each step.\n"
-        f"- Avoid giving any actual code.\n"
-        f"- Keep steps detailed enough so a CadQuery script can be generated directly from them.\n"
-        f"- Avoid using chamfers and fillets unnecessarily unless specified.\n"
+        f"- Build from bottom to top along +Z.\n"
+        f"- Each step should correspond to a CadQuery operation (extrude, cut, union, etc.).\n"
+        f"- Specify positions and orientations explicitly using axes.\n"
+        f"- Avoid chamfers and fillets unless necessary.\n\n"
+
+        f"Step 3: Validate the geometry.\n"
+        f"- Ensure all intended vertical structures extend along +Z.\n"
+        f"- Ensure no unintended parts go below the XY plane.\n"
+        f"- Confirm all orientations and alignments are consistent.\n"
     )
 
 

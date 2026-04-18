@@ -12,6 +12,7 @@ def plan_prompt(user_request: str) -> str:
         f"- Specify the positions and dimensions of elements relative and proportional to each other, only specifying numbers for one base element and calculating the rest from that.\n"
         f"- You may use specific points, edges or faces of a shape as reference for where to place other elements and what their dimensions are.\n"
         f"- Keep the model as simple as possible. Avoid unnecessary complexity.\n"
+        f"- Make sure individual components have correct relative dimensions and positions, if they are supposed to be attached then make sure their faces line up.\n"
         f"- Describe the overall shape clearly enough for a CAD engineer to understand.\n\n"
         f"Step 2: Provide a step-by-step plan to build the object in CadQuery.\n"
         f"- Each step should correspond to creating or modifying a primitive using CadQuery operations (extrude, fillet, cut, union, etc.).\n"

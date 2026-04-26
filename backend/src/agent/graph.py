@@ -3,7 +3,13 @@ from pydantic import BaseModel, Field
 
 from .state import AgentState
 from .executor import CadqueryExecutor, ExecutionError
-from .prompts import plan_prompt, codegen_prompt, diagnose_prompt, regen_prompt
+from .prompts import (
+    plan_prompt,
+    replan_prompt,
+    codegen_prompt,
+    diagnose_prompt,
+    regen_prompt,
+)
 from .llm import llm, llm_structured
 from .rag import retrieve, retrieve_for_plan, retrieve_for_error
 
@@ -37,24 +43,65 @@ def _number(code: str) -> str:
     return "\n".join(f"{i+1:04d}| {l}" for i, l in enumerate(code.splitlines()))
 
 
+def _append_history(state: AgentState, event: dict) -> list[dict]:
+    history = list(state.get("history", []))
+    history.append(event)
+    return history
+
+
 # ---------------------------------------------------------------------------
 # Nodes
 # ---------------------------------------------------------------------------
 
 def node_plan(state: AgentState) -> dict:
     print("Planning model...")
-    plan = llm(plan_prompt(state["user_request"]))
+    prompt_history = list(state.get("prompt_history", []))
+    mode = state.get("mode", "initial")
+    if mode == "refine" and state.get("plan"):
+        prompt = replan_prompt(state["plan"], state["latest_prompt"], prompt_history)
+    else:
+        prompt = plan_prompt(state["latest_prompt"], prompt_history)
+
+    plan = llm(prompt)
     print(f"Plan:\n{plan}\n")
-    return {"plan": plan}
+    return {
+        "plan": plan,
+        "history": _append_history(
+            state,
+            {
+                "iteration": state.get("iteration", 1),
+                "mode": mode,
+                "stage": "plan",
+                "prompt": state["latest_prompt"],
+                "plan": plan,
+            },
+        ),
+    }
 
 
 def node_codegen(state: AgentState) -> dict:
     print("Generating code...")
     docs = retrieve_for_plan(state["plan"])
     # print(f"Retrieved docs:\n{docs}\n")
-    code = _clean(llm(codegen_prompt(state["plan"], docs)))
+    previous_code = ""
+    if state.get("mode", "initial") == "refine":
+        previous_code = state.get("code", "")
+
+    code = _clean(llm(codegen_prompt(state["plan"], docs, previous_code=previous_code)))
     print(f"Generated code:\n{code}\n")
-    return {"code": code}
+    return {
+        "code": code,
+        "history": _append_history(
+            state,
+            {
+                "iteration": state.get("iteration", 1),
+                "mode": state.get("mode", "initial"),
+                "stage": "codegen",
+                "prompt": state["latest_prompt"],
+                "code": code,
+            },
+        ),
+    }
 
 
 def node_execute(state: AgentState) -> dict:
@@ -63,7 +110,25 @@ def node_execute(state: AgentState) -> dict:
     result, error = executor.run(state["code"])
     if error:
         print(f"Error: {error.error_type}: {error.message}\n")
-    return {"result": result, "error": error, "attempts": attempt + 1}
+
+    event = {
+        "iteration": state.get("iteration", 1),
+        "mode": state.get("mode", "initial"),
+        "stage": "execute",
+        "attempt": attempt + 1,
+                "prompt": state["latest_prompt"],
+        "result_ok": error is None,
+    }
+    if error is not None:
+        event["error_type"] = error.error_type
+        event["error_message"] = error.message
+
+    return {
+        "result": result,
+        "error": error,
+        "attempts": attempt + 1,
+        "history": _append_history(state, event),
+    }
 
 
 def node_fix(state: AgentState) -> dict:
@@ -94,7 +159,22 @@ def node_fix(state: AgentState) -> dict:
     history = state.get("fix_history", []) + [
         {"error": f"{error.error_type}: {error.message}", "summary": regen.fix_summary}
     ]
-    return {"code": fixed_code, "fix_history": history}
+    return {
+        "code": fixed_code,
+        "fix_history": history,
+        "history": _append_history(
+            state,
+            {
+                "iteration": state.get("iteration", 1),
+                "mode": state.get("mode", "initial"),
+                "stage": "fix",
+                "prompt": state["latest_prompt"],
+                "error": f"{error.error_type}: {error.message}",
+                "diagnosis": diagnosis,
+                "fix_summary": regen.fix_summary,
+            },
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,5 @@
-from typing import Optional
-
-
-def plan_prompt(user_request: str) -> str:
+def _plan_rules() -> str:
     return (
-        f"Design a precise 3D model for: {user_request}.\n"
         f"Step 1: Describe the object geometrically.\n"
         f"- Break the object into simple primitives (box, cylinder, sphere, etc.).\n"
         f"- For each primitive, specify approximate dimensions in millimeters.\n"
@@ -12,7 +8,8 @@ def plan_prompt(user_request: str) -> str:
         f"- Specify the positions and dimensions of elements relative and proportional to each other, only specifying numbers for one base element and calculating the rest from that.\n"
         f"- You may use specific points, edges or faces of a shape as reference for where to place other elements and what their dimensions are.\n"
         f"- Keep the model as simple as possible. Avoid unnecessary complexity.\n"
-        f"- Make sure individual components have correct relative dimensions and positions, if they are supposed to be attached then make sure their faces line up.\n"
+        f"- Make sure individual components have correct relative dimensions and positions.\n"
+        f"- IMPORTANT: Make sure if components are supposed to be attached then make sure their faces line up.\n"
         f"- Describe the overall shape clearly enough for a CAD engineer to understand.\n\n"
         f"Step 2: Provide a step-by-step plan to build the object in CadQuery.\n"
         f"- Each step should correspond to creating or modifying a primitive using CadQuery operations (extrude, fillet, cut, union, etc.).\n"
@@ -23,7 +20,45 @@ def plan_prompt(user_request: str) -> str:
     )
 
 
-def codegen_prompt(plan: str, api_context: str) -> str:
+def _format_prompt_history(prompt_history: list[str]) -> str:
+    if not prompt_history:
+        return ""
+    lines = [f"{i + 1}. {prompt}" for i, prompt in enumerate(prompt_history)]
+    return "PROMPT HISTORY:\n" + "\n".join(lines) + "\n\n"
+
+
+def plan_prompt(current_prompt: str, prompt_history: list[str]) -> str:
+    return (
+        f"Design a precise 3D model for: {current_prompt}.\n\n"
+        f"{_format_prompt_history(prompt_history)}"
+        f"{_plan_rules()}"
+    )
+
+
+def replan_prompt(previous_plan: str, current_prompt: str, prompt_history: list[str]) -> str:
+    return (
+        f"You are refining an existing CAD design plan.\n"
+        f"CURRENT PROMPT:\n"
+        f"{current_prompt}\n\n"
+        f"{_format_prompt_history(prompt_history)}"
+        f"PREVIOUS PLAN:\n"
+        f"{previous_plan}\n\n"
+        f"Regenerate the FULL updated geometric plan and build steps.\n\n"
+        f"Keep unchanged parts logically consistent with the previous plan and apply only requested modifications.\n"
+        f"{_plan_rules()}"
+    )
+
+
+def codegen_prompt(plan: str, api_context: str, previous_code: str = "") -> str:
+    previous_code_block = ""
+    if previous_code.strip():
+        previous_code_block = (
+            f"PREVIOUS WORKING-STYLE CODE (REFERENCE ONLY):\n"
+            f"```\n{previous_code}\n```\n\n"
+            f"- Keep the same overall modeling approach and style when possible.\n"
+            f"- Apply only the plan-driven changes needed for this iteration.\n\n"
+        )
+
     return (
         f"You are an expert CadQuery programmer. You have access to the full CadQuery 2 API.\n"
         f"<CONTEXT>\n"
@@ -31,6 +66,7 @@ def codegen_prompt(plan: str, api_context: str) -> str:
         f"<END CONTEXT>\n\n"
         f"PLAN:\n"
         f"{plan}\n\n"
+        f"{previous_code_block}"
         f"Based on the above plan, write Python code that constructs the described 3D model using CadQuery 2.\n"
         f"- Prefer using calculated values instead of hardcoded numbers. Ideally for positions use calculated values relative to other elements. Inline calculations if possible instead of making too many variables.\n"
         f"- Specify the positions and dimensions of elements relative and proportional to each other, only specifying numbers for one base element and calculating the rest from that.\n"

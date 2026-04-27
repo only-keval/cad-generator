@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 
 from .state import AgentState
-from .executor import CadqueryExecutor, ExecutionError
+from .executor import execute, ExecutionError
 from .prompts import (
     plan_prompt,
     replan_prompt,
@@ -19,7 +19,6 @@ from .rag import retrieve, retrieve_for_plan, retrieve_for_error
 # ---------------------------------------------------------------------------
 
 MAX_ATTEMPTS = 5
-executor = CadqueryExecutor()
 
 
 class RegenResponse(BaseModel):
@@ -107,7 +106,7 @@ def node_codegen(state: AgentState) -> dict:
 def node_execute(state: AgentState) -> dict:
     attempt = state.get("attempts", 0)
     print(f"Executing (attempt {attempt + 1})...")
-    result, error = executor.run(state["code"])
+    result, error = execute(state["code"])
     if error:
         print(f"Error: {error.error_type}: {error.message}\n")
 

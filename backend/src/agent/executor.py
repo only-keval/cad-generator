@@ -57,45 +57,44 @@ _SAFE_BUILTINS = {
 }
 
 
-class CadqueryExecutor:
-    def run(self, script: str) -> tuple[Optional[cq.Shape | cq.Workplane], Optional[ExecutionError]]:
-        safe_globals = {
-            "__builtins__": _SAFE_BUILTINS,
-            "math": math,
-            "cq": cq,
-        }
-        local_env = {}
+def execute(script: str) -> tuple[Optional[cq.Shape | cq.Workplane], Optional[ExecutionError]]:
+    safe_globals = {
+        "__builtins__": _SAFE_BUILTINS,
+        "math": math,
+        "cq": cq,
+    }
+    local_env = {}
 
-        try:
-            exec(script, safe_globals, local_env)
-        except Exception as e:
-            return None, _extract_error(e, "exec")
+    try:
+        exec(script, safe_globals, local_env)
+    except Exception as e:
+        return None, _extract_error(e, "exec")
 
-        if "build" not in local_env:
+    if "build" not in local_env:
+        return None, ExecutionError(
+            stage="missing_build",
+            error_type="MissingBuildFunction",
+            message="build() was not defined.",
+            traceback="", file=None, line=None, function=None,
+        )
+
+    try:
+        result = local_env["build"]()
+        if result is None:
             return None, ExecutionError(
-                stage="missing_build",
-                error_type="MissingBuildFunction",
-                message="build() was not defined.",
-                traceback="", file=None, line=None, function=None,
+                stage="build",
+                error_type="NoReturnValue",
+                message="build() did not return anything.",
+                traceback="", file=None, line=None, function="build",
             )
+        if not isinstance(result, (cq.Shape, cq.Workplane)):
+            return None, ExecutionError(
+                stage="build",
+                error_type="InvalidReturnType",
+                message=f"build() returned an object of type {type(result).__name__}, expected cq.Shape or cq.Workplane.",
+                traceback="", file=None, line=None, function="build",
+            )
+    except Exception as e:
+        return None, _extract_error(e, "build")
 
-        try:
-            result = local_env["build"]()
-            if result is None:
-                return None, ExecutionError(
-                    stage="build",
-                    error_type="NoReturnValue",
-                    message="build() did not return anything.",
-                    traceback="", file=None, line=None, function="build",
-                )
-            if not isinstance(result, (cq.Shape, cq.Workplane)):
-                return None, ExecutionError(
-                    stage="build",
-                    error_type="InvalidReturnType",
-                    message=f"build() returned an object of type {type(result).__name__}, expected cq.Shape or cq.Workplane.",
-                    traceback="", file=None, line=None, function="build",
-                )
-        except Exception as e:
-            return None, _extract_error(e, "build")
-
-        return result, None
+    return result, None

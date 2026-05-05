@@ -1,9 +1,9 @@
 import os
 import cadquery as cq
 from dotenv import load_dotenv
-from agent.graph import app
-from agent.executor import ExecutionError
-from agent.rag import build_retriever
+from app.agent.graph import app
+from app.agent.executor import ExecutionError
+from app.agent.rag import build_retriever
 
 if not load_dotenv():
     print("WARNING: .env not found, assuming env vars are already set.")

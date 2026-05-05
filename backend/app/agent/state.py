@@ -15,6 +15,5 @@ class AgentState(TypedDict):
     code: str
     error: Optional[object]   # ExecutionError | None
     fix_history: list[dict]
-    history: list[dict]
     attempts: int
     result: Optional[object]  # cq.Shape | cq.Workplane | None

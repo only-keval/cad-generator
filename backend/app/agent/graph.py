@@ -42,10 +42,7 @@ def _number(code: str) -> str:
     return "\n".join(f"{i+1:04d}| {l}" for i, l in enumerate(code.splitlines()))
 
 
-def _append_history(state: AgentState, event: dict) -> list[dict]:
-    history = list(state.get("history", []))
-    history.append(event)
-    return history
+
 
 
 # ---------------------------------------------------------------------------
@@ -65,16 +62,6 @@ def node_plan(state: AgentState) -> dict:
     print(f"Plan:\n{plan}\n")
     return {
         "plan": plan,
-        "history": _append_history(
-            state,
-            {
-                "iteration": state.get("iteration", 1),
-                "mode": mode,
-                "stage": "plan",
-                "prompt": state["latest_prompt"],
-                "plan": plan,
-            },
-        ),
     }
 
 
@@ -90,16 +77,6 @@ def node_codegen(state: AgentState) -> dict:
     print(f"Generated code:\n{code}\n")
     return {
         "code": code,
-        "history": _append_history(
-            state,
-            {
-                "iteration": state.get("iteration", 1),
-                "mode": state.get("mode", "initial"),
-                "stage": "codegen",
-                "prompt": state["latest_prompt"],
-                "code": code,
-            },
-        ),
     }
 
 
@@ -110,23 +87,10 @@ def node_execute(state: AgentState) -> dict:
     if error:
         print(f"Error: {error.error_type}: {error.message}\n")
 
-    event = {
-        "iteration": state.get("iteration", 1),
-        "mode": state.get("mode", "initial"),
-        "stage": "execute",
-        "attempt": attempt + 1,
-                "prompt": state["latest_prompt"],
-        "result_ok": error is None,
-    }
-    if error is not None:
-        event["error_type"] = error.error_type
-        event["error_message"] = error.message
-
     return {
         "result": result,
         "error": error,
         "attempts": attempt + 1,
-        "history": _append_history(state, event),
     }
 
 
@@ -161,18 +125,6 @@ def node_fix(state: AgentState) -> dict:
     return {
         "code": fixed_code,
         "fix_history": history,
-        "history": _append_history(
-            state,
-            {
-                "iteration": state.get("iteration", 1),
-                "mode": state.get("mode", "initial"),
-                "stage": "fix",
-                "prompt": state["latest_prompt"],
-                "error": f"{error.error_type}: {error.message}",
-                "diagnosis": diagnosis,
-                "fix_summary": regen.fix_summary,
-            },
-        ),
     }
 
 

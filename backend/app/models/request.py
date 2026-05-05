@@ -24,6 +24,7 @@ class Request(Base):
     
     # Status
     status = Column(Enum(RequestStatus), default=RequestStatus.QUEUED, nullable=False)
+    current_stage = Column(String(32), nullable=True)  # Agent stage: plan, codegen, execute, fix
     created_at = Column(DateTime, default=now, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)

@@ -128,8 +128,27 @@ def execute_request_background(request_id: int, session_id: int) -> None:
             state = hydrate_agent_state(db, session_id)
             state["latest_prompt"] = db_request.prompt
             
-            # Run the agent graph
-            result_state = agent_graph.invoke(state)
+            # Stream agent execution to track stages
+            result_state = state.copy()
+            for event in agent_graph.stream(state):
+                # event is a dict like {node_name: node_output}
+                for node_name in event.keys():
+                    if node_name != "__end__":
+                        # Update stage in database with explicit session merge
+                        try:
+                            # Merge the request back into the session to ensure it's attached
+                            db_request = db.merge(db_request)
+                            db_request.current_stage = node_name
+                            db.commit()
+                            print(f"[Stage] Updated to: {node_name}")
+                        except Exception as stage_err:
+                            print(f"[Warning] Failed to update stage: {stage_err}")
+                            db.rollback()  # Rollback failed stage update
+                        
+                        # Update local state with node output
+                        node_output = event[node_name]
+                        if node_output:
+                            result_state.update(node_output)
             
             # Store full agent state (plan, fix_history, mode, iteration, etc.)
             # This allows schema to evolve without migrations
@@ -170,6 +189,7 @@ def execute_request_background(request_id: int, session_id: int) -> None:
             
             # Update request with results
             db_request.status = RequestStatus.COMPLETED if error is None else RequestStatus.FAILED
+            db_request.current_stage = None  # Clear stage when complete
             db_request.completed_at = now()
             db_request.code = code
             db_request.error = error_dict
@@ -181,6 +201,7 @@ def execute_request_background(request_id: int, session_id: int) -> None:
         except Exception as e:
             # Catch and persist any execution errors
             db_request.status = RequestStatus.FAILED
+            db_request.current_stage = None  # Clear stage on error
             db_request.completed_at = now()
             db_request.error = {
                 "type": type(e).__name__,

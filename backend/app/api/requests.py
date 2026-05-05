@@ -23,6 +23,10 @@ def submit_request(
     # Create request with QUEUED status
     db_request = services.create_queued_request(db, session_id, payload.prompt)
     
+    # Ensure request ID is properly set
+    if not db_request.id:
+        raise HTTPException(status_code=500, detail="Failed to create request")
+    
     # Queue background execution
     background_tasks.add_task(
         services.execute_request_background,
@@ -62,9 +66,12 @@ def get_request_status(request_id: int, db: SQLSession = Depends(get_db)):
         request_id=db_request.id,
         session_id=db_request.session_id,
         status=db_request.status.value,
+        current_stage=db_request.current_stage,
         prompt=db_request.prompt,
         created_at=db_request.created_at,
         started_at=db_request.started_at,
         completed_at=db_request.completed_at,
         result=result,
     )
+    
+

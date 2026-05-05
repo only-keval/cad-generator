@@ -39,6 +39,7 @@ class RequestStatusResponse(BaseModel):
     request_id: int
     session_id: int
     status: RequestStatusSchema
+    current_stage: Optional[str] = None  # plan, codegen, execute, or fix
     prompt: str
     created_at: datetime
     started_at: Optional[datetime] = None

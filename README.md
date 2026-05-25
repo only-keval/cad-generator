@@ -45,6 +45,7 @@ RAG is used twice:
 ```mermaid
 flowchart TD
   U[User prompt] --> A[LangGraph agent]
+  A --> P
 
   subgraph FLOW[Agent flow]
         P[plan]
@@ -54,10 +55,10 @@ flowchart TD
 
         P --> C
         C --> E
+        E -->|exhausted attempts| X[Stop with error]
         E -->|success| O[CadQuery result]
-        E -->|failure and attempts remain| F
+        E -->|failure| F
         F --> E
-        E -->|failure and attempts exhausted| X[Stop with error]
     end
 
     subgraph RAG[RAG layer]
@@ -111,14 +112,14 @@ Request execution flow:
 1. A request is created with `queued` status.
 2. FastAPI background tasks call the shared agent service.
 3. The service streams LangGraph stage updates into the database.
-4. On success, the CadQuery result is exported to STL and exposed through `/artifacts`.
+4. On success, the CadQuery result is exported to STL, exposed through `/artifacts`, and the artifact URL is stored in the request row.
 5. On failure, the request stores the error, attempt count, and serialized agent state for later inspection.
 
-The persistence layer uses SQLAlchemy models for `users`, `sessions`, and `requests`. Request records store the prompt, current stage, code, error payload, attempt count, result artifact URL, and a JSON snapshot of the agent state.
+The persistence layer uses SQLAlchemy models for `users`, `sessions`, and `requests`. Request records store the prompt, current stage, code, error payload, attempt count, result artifact URL, and a JSON snapshot of the agent state, so the generated artifact can be read later at any point.
 
 ```mermaid
 flowchart TD
-    A[Client] -->|Submit request| R[FastAPI route]
+  A[Client] -->|submit request| R[FastAPI route]
     R --> Q[Create queued request]
     Q --> B[Background task]
     B --> H[Hydrate agent state]
@@ -127,10 +128,12 @@ flowchart TD
     S --> D[(SQLAlchemy / DB)]
     G --> E{Success?}
     E -->|yes| X[Export STL]
-    X --> U[/artifacts/<request>.stl]
+    X --> U[Generated STL artifact]
+    U --> V[Store artifact URL in request row]
+    V --> D
     E -->|no| F[Persist error + attempts]
     F --> D
-    R --> P[Poll request status]
+  R --> P[Poll request status from DB]
 ```
 
 ## CLI

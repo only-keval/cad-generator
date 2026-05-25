@@ -118,7 +118,7 @@ The persistence layer uses SQLAlchemy models for `users`, `sessions`, and `reque
 
 ```mermaid
 flowchart TD
-    A[Client] -->|POST /sessions/{id}/request| R[FastAPI route]
+    A[Client] -->|Submit request| R[FastAPI route]
     R --> Q[Create queued request]
     Q --> B[Background task]
     B --> H[Hydrate agent state]
@@ -130,7 +130,7 @@ flowchart TD
     X --> U[/artifacts/<request>.stl]
     E -->|no| F[Persist error + attempts]
     F --> D
-    R --> P[GET /request/{request_id} polls status]
+    R --> P[Poll request status]
 ```
 
 ## CLI

@@ -1,8 +1,6 @@
 # Cad Generator
 
-Cad Generator is a text-to-CAD workflow built around CadQuery, LangGraph, and retrieval-augmented generation. The repository has two branch shapes: `master` centers on the CLI agent, while `rest-api` is the current development branch that adds a FastAPI backend around the same core agent and is intended to be merged into main later.
-
-The core behavior is simple in both branches: take a prompt, turn it into a geometric plan, generate CadQuery code from retrieved documentation, execute it, and persist the result or the failure state.
+Cad Generator is a text-to-CAD workflow built around CadQuery, LangGraph, and retrieval-augmented generation. It takes a prompt, turns it into a geometric plan, generates CadQuery code from retrieved documentation, executes it, and persists the result or failure state.
 
 ## What It Does
 
@@ -18,8 +16,6 @@ At a high level, it:
 6. Exports successful runs as STL artifacts.
 
 ## How It Works
-
-The shared agent is reused by both the CLI and the API branch.
 
 - The LangGraph state machine plans the model, generates CadQuery code, executes it, and retries with a repair step when execution fails.
 - The RAG layer builds a persistent Chroma index from the CadQuery API reference PDF and serves retrieval for planning and error repair.
@@ -80,7 +76,7 @@ flowchart TD
 
 ## REST API
 
-The `rest-api` branch adds a FastAPI backend on top of the shared agent. The application entrypoint is `backend/app/main.py`, which imports the API app from `backend/app/api` and runs it with Uvicorn.
+The application provides a FastAPI backend on top of the shared agent. The application entrypoint is `backend/app/main.py`, which imports the API app from `backend/app/api` and runs it with Uvicorn.
 
 Startup behavior:
 
@@ -138,34 +134,9 @@ flowchart TD
 
 ## CLI
 
-The CLI remains available in `backend/app/cli.py` on the `rest-api` branch, and in `backend/src/main.py` on `master`. It loads the same agent graph and RAG layer, prompts for a 3D model request, and exports the resulting shape to `result.stl`. After each run, it can refine or improve the design by carrying forward the previous code and prompt history.
+The CLI is available in `backend/app/cli.py`. It loads the same agent graph and RAG layer, prompts for a 3D model request, and exports the resulting shape to `result.stl`. After each run, it can refine or improve the design by carrying forward the previous code and prompt history.
 
 ## Repo Layout
-
-The layouts differ by branch, but the same README applies to both.
-
-### master
-
-```text
-backend/
-  data/
-    cadquery_api_reference.txt
-    cadquery-readthedocs-io-en-latest.pdf
-  scripts/
-    fetch_api_reference.py
-  src/
-    main.py
-    agent/
-      executor.py
-      graph.py
-      llm.py
-      prompts.py
-      rag.py
-      state.py
-  requirements.txt
-```
-
-### rest-api
 
 ```text
 backend/
@@ -203,9 +174,9 @@ Typical setup:
 
 1. Create and activate a Python environment.
 2. Install dependencies from `backend/requirements.txt`.
-3. Set `DATABASE_URL` if you are running the API branch and want persistence.
+3. Set `DATABASE_URL` if you want persistence.
 4. Set the LLM environment variables used by LiteLLM.
-5. Run either the CLI or the FastAPI app.
+5. Run the CLI or the FastAPI app.
 
 Useful environment variables:
 

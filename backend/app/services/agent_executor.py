@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session as SQLSession
 import cadquery as cq
 
-from app.models import Request as DBRequest, RequestStatus
+from app.models import Request as DBRequest, Session as DBSession, RequestStatus
 from app.agent.graph import app as agent_graph
 from app.agent.state import AgentState
 from .session_service import get_session_requests
@@ -101,57 +101,83 @@ def create_queued_request(db: SQLSession, session_id: int, prompt: str) -> DBReq
 def execute_request_background(request_id: int, session_id: int) -> None:
     """
     Background worker: execute agent and persist results.
-    Should be called via BackgroundTasks or threading.
+    Called via BackgroundTasks from API layer.
     """
     from app.db import SessionLocal
-    from .session_service import get_session
-    
+    from app.models.request import Request as Req
+
     db = SessionLocal()
     try:
         db_request = get_request(db, request_id)
         if not db_request:
             print(f"Request {request_id} not found")
             return
-        
-        session = get_session(db, session_id)
+
+        session = db.query(DBSession).filter(DBSession.id == session_id).first()
         if not session:
             print(f"Session {session_id} not found")
             return
-        
+
         # Mark as RUNNING
         db_request.status = RequestStatus.RUNNING
         db_request.started_at = now()
+        db_request.current_stage = "plan"
         db.commit()
-        
+
         try:
-            # Hydrate state from prior session context
             state = hydrate_agent_state(db, session_id)
             state["latest_prompt"] = db_request.prompt
-            
-            # Stream agent execution to track stages
+
             result_state = state.copy()
             for event in agent_graph.stream(state):
-                # event is a dict like {node_name: node_output}
-                for node_name in event.keys():
-                    if node_name != "__end__":
-                        # Update stage in database with explicit session merge
-                        try:
-                            # Merge the request back into the session to ensure it's attached
-                            db_request = db.merge(db_request)
-                            db_request.current_stage = node_name
-                            db.commit()
-                            print(f"[Stage] Updated to: {node_name}")
-                        except Exception as stage_err:
-                            print(f"[Warning] Failed to update stage: {stage_err}")
-                            db.rollback()  # Rollback failed stage update
-                        
-                        # Update local state with node output
-                        node_output = event[node_name]
-                        if node_output:
-                            result_state.update(node_output)
-            
-            # Store full agent state (plan, fix_history, mode, iteration, etc.)
-            # This allows schema to evolve without migrations
+                for node_name, node_output in event.items():
+                    if node_name == "__end__":
+                        continue
+
+                    # Re-fetch request to avoid detached instance issues
+                    req = db.query(Req).filter(Req.id == request_id).first()
+                    if not req:
+                        continue
+
+                    # Update local state from completed node
+                    if node_output:
+                        result_state.update(node_output)
+
+                    # Set current_stage to what is actually running NEXT
+                    # LangGraph stream() yields AFTER node completes, so
+                    # we predict the next node from the graph structure.
+                    if node_name == "plan":
+                        req.current_stage = "codegen"
+                    elif node_name == "codegen":
+                        req.current_stage = "execute"
+                    elif node_name == "execute":
+                        err = result_state.get("error")
+                        attempts = result_state.get("attempts", 0)
+                        if err and attempts < 5:
+                            req.current_stage = "fix"
+                        else:
+                            req.current_stage = None  # done / gave up
+                    elif node_name == "fix":
+                        req.current_stage = "execute"
+
+                    if not req.started_at:
+                        req.started_at = now()
+
+                    # Track intermediate results
+                    if node_name == "execute":
+                        req.attempts = result_state.get("attempts", req.attempts or 0)
+                    if node_name == "codegen" or node_name == "fix":
+                        req.code = result_state.get("code")
+                    if node_name == "execute" and result_state.get("error"):
+                        err = result_state["error"]
+                        req.error = {
+                            "type": err.error_type if hasattr(err, "error_type") else type(err).__name__,
+                            "message": err.message if hasattr(err, "message") else str(err),
+                        }
+
+                    db.commit()
+
+            # Store full agent state
             agent_state_to_store = {
                 "plan": result_state.get("plan", ""),
                 "fix_history": result_state.get("fix_history", []),
@@ -160,59 +186,46 @@ def execute_request_background(request_id: int, session_id: int) -> None:
                 "latest_prompt": result_state.get("latest_prompt", ""),
                 "prompt_history": result_state.get("prompt_history", []),
             }
-            
-            # Extract key outputs for direct columns
+
             code = result_state.get("code", "")
             error = result_state.get("error")
             result = result_state.get("result")
             attempts = result_state.get("attempts", 0)
-            
-            # Export artifact if successful
-            artifact_path = None
+
+            artifact_url = None
             if result:
-                artifact_path = export_stl(result, db_request.id)
-            
-            # Format error info as dict
+                artifact_url = export_stl(result, db_request.id)
+
             error_dict = None
             if error:
-                try:
-                    error_dict = {
-                        "type": error.error_type if hasattr(error, "error_type") else type(error).__name__,
-                        "message": error.message if hasattr(error, "message") else str(error),
-                        "traceback": str(error) if hasattr(error, "traceback") else "",
-                    }
-                except Exception:
-                    error_dict = {
-                        "type": type(error).__name__,
-                        "message": str(error),
-                    }
-            
-            # Update request with results
+                error_dict = {
+                    "type": error.error_type if hasattr(error, "error_type") else type(error).__name__,
+                    "message": error.message if hasattr(error, "message") else str(error),
+                    "traceback": error.traceback if hasattr(error, "traceback") else "",
+                }
+
             db_request.status = RequestStatus.COMPLETED if error is None else RequestStatus.FAILED
-            db_request.current_stage = None  # Clear stage when complete
+            db_request.current_stage = None
             db_request.completed_at = now()
             db_request.code = code
             db_request.error = error_dict
             db_request.attempts = attempts
-            db_request.result_artifact_url = artifact_path
+            db_request.result_artifact_url = artifact_url
             db_request.agent_state = agent_state_to_store
             db.commit()
-            
+
         except Exception as e:
-            # Catch and persist any execution errors
-            db_request.status = RequestStatus.FAILED
-            db_request.current_stage = None  # Clear stage on error
-            db_request.completed_at = now()
-            db_request.error = {
-                "type": type(e).__name__,
-                "message": str(e),
-            }
-            db.commit()
-        
-        # Update session timestamp
+            req = db.query(Req).filter(Req.id == request_id).first()
+            if req:
+                req.status = RequestStatus.FAILED
+                req.current_stage = None
+                req.completed_at = now()
+                req.error = {"type": type(e).__name__, "message": str(e)}
+                db.commit()
+
         session.updated_at = now()
         db.commit()
-    
+
     finally:
         db.close()
 

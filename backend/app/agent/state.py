@@ -1,9 +1,6 @@
 from typing import Optional, TypedDict
+from .executor import ExecutionError
 import cadquery as cq
-
-
-class ExecutionError:
-    pass  # imported from executor at runtime to avoid circular
 
 
 class AgentState(TypedDict):
@@ -13,7 +10,7 @@ class AgentState(TypedDict):
     iteration: int
     plan: str
     code: str
-    error: Optional[object]   # ExecutionError | None
+    error: Optional[ExecutionError]
     fix_history: list[dict]
     attempts: int
     result: Optional[object]  # cq.Shape | cq.Workplane | None

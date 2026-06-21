@@ -77,7 +77,7 @@ def generate_session_title(db: SQLSession, session_id: int) -> Optional[DBSessio
     
     This is a blocking operation that calls the LLM.
     """
-    from agent.llm import call_llm
+    from app.agent.llm import llm
     
     session = get_session(db, session_id)
     if not session:
@@ -103,7 +103,7 @@ def generate_session_title(db: SQLSession, session_id: int) -> Optional[DBSessio
     Title:"""
     
     try:
-        title = call_llm(prompt).strip()
+        title = llm(prompt).strip()
         # Clean up the title if LLM added quotes or extra text
         title = title.strip('"\'').strip()
         
@@ -163,23 +163,29 @@ def list_archived_sessions(
 
 
 def get_session_requests(
-    db: SQLSession, session_id: int, limit: int = 50, cursor: Optional[int] = None
+    db: SQLSession, session_id: int, limit: int = 50, cursor: Optional[int] = None,
+    order: str = "desc",
 ) -> tuple[list[DBRequest], Optional[int]]:
-    """Fetch paginated requests for a session, ordered by creation time (newest first).
-    
+    """Fetch paginated requests for a session, ordered by creation time.
+
     When cursor is provided, fetches older requests (for scrolling up).
+    order: 'asc' for oldest first, 'desc' for newest first (default).
     """
-    query = db.query(DBRequest).filter(DBRequest.session_id == session_id).order_by(DBRequest.created_at.desc())
+    query = db.query(DBRequest).filter(DBRequest.session_id == session_id)
+    query = query.order_by(
+        DBRequest.created_at.asc() if order == "asc" else DBRequest.created_at.desc()
+    )
     
     if cursor:
-        # Fetch requests older than the cursor (smaller IDs)
-        query = query.filter(DBRequest.id < cursor)
+        if order == "asc":
+            query = query.filter(DBRequest.id > cursor)
+        else:
+            query = query.filter(DBRequest.id < cursor)
     
     requests = query.limit(limit + 1).all()
     
     next_cursor = None
     if len(requests) > limit:
-        # Cursor points to the oldest item fetched (for next page)
         next_cursor = requests[limit].id
         requests = requests[:limit]
     

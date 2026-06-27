@@ -21,7 +21,7 @@ export default function SessionList() {
 
   const createSession = async () => {
     try {
-      const s = await api.post<Session>('/sessions');
+      const s = await api.post<Session>('/sessions', {});
       navigate(`/sessions/${s.session_id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create session');

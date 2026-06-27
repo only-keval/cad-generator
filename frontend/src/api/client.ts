@@ -8,20 +8,22 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options?.body) {
+    headers['Content-Type'] = 'application/json';
+  }
+  Object.assign(headers, getAuthHeaders(), options?.headers as Record<string, string> || {});
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...options?.headers,
-    },
+    headers,
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
     if (res.status === 401) {
       useAuth.getState().clearAuth();
     }
-    throw new Error(error.detail || `Request failed with ${res.status}`);
+    throw new Error(typeof error.detail === 'string' ? error.detail : (error.detail?.message || `Request failed with ${res.status}`));
   }
   return res.json();
 }

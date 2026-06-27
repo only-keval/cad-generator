@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request as FastAPIRequest
 from sqlalchemy.orm import Session as SQLSession
 
 from app.db import get_db
 from app.schemas import CreateRequestPayload, RequestCreatedResponse, RequestStatusResponse, RequestResult, StageInfo, TimestampsInfo
 import app.services as services
-from app.models import RequestStatus
+from app.models import RequestStatus, User
+from app.api.deps import get_current_user
+from app.services.rate_limit import check_rate_limit, increment_request_count
 
 router = APIRouter(prefix="/sessions", tags=["requests"])
 
@@ -15,10 +17,12 @@ def submit_request(
     payload: CreateRequestPayload,
     background_tasks: BackgroundTasks,
     db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    session = services.get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    services.get_owned_session(db, session_id, current_user.id)
+
+    check_rate_limit(current_user, db)
+    increment_request_count(current_user, db)
 
     db_request = services.create_queued_request(db, session_id, payload.prompt)
 
@@ -89,12 +93,16 @@ def retry_request(
     request_id: int,
     background_tasks: BackgroundTasks,
     db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     original = services.get_request(db, request_id)
     if not original:
         raise HTTPException(status_code=404, detail="Request not found")
     if original.status != RequestStatus.FAILED:
         raise HTTPException(status_code=400, detail="Only failed requests can be retried")
+
+    check_rate_limit(current_user, db)
+    increment_request_count(current_user, db)
 
     new_request = services.create_queued_request(db, original.session_id, original.prompt)
 
@@ -110,4 +118,3 @@ def retry_request(
         status=new_request.status.value,
         created_at=new_request.created_at,
     )
-

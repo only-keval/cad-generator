@@ -7,7 +7,7 @@ from ..db import init_db, SessionLocal
 from ..models import RequestStatus
 from ..utils import now
 from ..agent.rag import build_retriever
-from ..auth import get_current_user
+from ..api.deps import get_current_user
 from .users import router as users_router
 from .sessions import router as sessions_router
 from .requests import router as requests_submit_router, requests_router

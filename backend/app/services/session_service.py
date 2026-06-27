@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session as SQLSession
 
 from app.models import User, Session as DBSession, Request as DBRequest
@@ -32,6 +33,16 @@ def create_session(db: SQLSession, user_id: int, title: Optional[str] = None) ->
 def get_session(db: SQLSession, session_id: int) -> Optional[DBSession]:
     """Fetch a session by ID."""
     return db.query(DBSession).filter(DBSession.id == session_id).first()
+
+
+def get_owned_session(db: SQLSession, session_id: int, user_id: int) -> DBSession:
+    """Fetch a session and verify it belongs to the user. Raises 403/404."""
+    session = get_session(db, session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    if session.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Session does not belong to this user")
+    return session
 
 
 def close_session(db: SQLSession, session_id: int) -> Optional[DBSession]:

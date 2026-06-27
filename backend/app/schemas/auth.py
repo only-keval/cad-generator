@@ -35,5 +35,12 @@ class UserInfoResponse(BaseModel):
     is_guest: bool
     created_at: datetime
 
+class LimitInfoResponse(BaseModel):
+    is_guest: bool
+    requests_used: int
+    requests_remaining: int
+    limit: int
+    limit_type: str  # "guest_total" or "daily"
+
     class Config:
         from_attributes = True

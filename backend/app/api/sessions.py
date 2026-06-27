@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session as SQLSession
 
 from app.db import get_db
-from app.auth import get_current_user
+from app.api.deps import get_current_user
 from app.models import User
 from app.schemas import (
     CreateSessionPayload,
@@ -71,10 +71,12 @@ def list_user_archived_sessions(
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
-def get_session(session_id: int, db: SQLSession = Depends(get_db)):
-    session = services.get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+def get_session(
+    session_id: int,
+    db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = services.get_owned_session(db, session_id, current_user.id)
     return SessionResponse(
         session_id=session.id, user_id=session.user_id, title=session.title,
         is_active=session.is_active, archived_at=session.archived_at,
@@ -89,10 +91,9 @@ def get_session_history(
     limit: int = Query(50, ge=1, le=100),
     order: str = Query("desc", pattern="^(asc|desc)$"),
     db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    session = services.get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    services.get_owned_session(db, session_id, current_user.id)
     requests, next_cursor = services.get_session_requests(
         db, session_id, limit=limit, cursor=cursor, order=order,
     )
@@ -110,18 +111,24 @@ def get_session_history(
 
 
 @router.delete("/{session_id}")
-def close_session(session_id: int, db: SQLSession = Depends(get_db)):
-    session = services.close_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+def close_session(
+    session_id: int,
+    db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = services.get_owned_session(db, session_id, current_user.id)
+    services.close_session(db, session_id)
     return {"session_id": session_id, "status": "closed"}
 
 
 @router.post("/{session_id}/generate-title", response_model=SessionResponse)
-def generate_session_title(session_id: int, db: SQLSession = Depends(get_db)):
+def generate_session_title(
+    session_id: int,
+    db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    services.get_owned_session(db, session_id, current_user.id)
     session = services.generate_session_title(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(
         session_id=session.id, user_id=session.user_id, title=session.title,
         is_active=session.is_active, archived_at=session.archived_at,
@@ -134,10 +141,10 @@ def update_session(
     session_id: int,
     payload: UpdateSessionPayload,
     db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    services.get_owned_session(db, session_id, current_user.id)
     session = services.update_session_title(db, session_id, payload.title)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(
         session_id=session.id, user_id=session.user_id, title=session.title,
         is_active=session.is_active, archived_at=session.archived_at,
@@ -146,10 +153,13 @@ def update_session(
 
 
 @router.post("/{session_id}/archive", response_model=SessionResponse)
-def archive_session_endpoint(session_id: int, db: SQLSession = Depends(get_db)):
+def archive_session_endpoint(
+    session_id: int,
+    db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    services.get_owned_session(db, session_id, current_user.id)
     session = services.archive_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(
         session_id=session.id, user_id=session.user_id, title=session.title,
         is_active=session.is_active, archived_at=session.archived_at,
@@ -158,10 +168,13 @@ def archive_session_endpoint(session_id: int, db: SQLSession = Depends(get_db)):
 
 
 @router.post("/{session_id}/unarchive", response_model=SessionResponse)
-def unarchive_session_endpoint(session_id: int, db: SQLSession = Depends(get_db)):
+def unarchive_session_endpoint(
+    session_id: int,
+    db: SQLSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    services.get_owned_session(db, session_id, current_user.id)
     session = services.unarchive_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(
         session_id=session.id, user_id=session.user_id, title=session.title,
         is_active=session.is_active, archived_at=session.archived_at,

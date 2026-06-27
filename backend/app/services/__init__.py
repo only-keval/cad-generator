@@ -3,6 +3,7 @@ from .session_service import (
     get_user,
     create_session,
     get_session,
+    get_owned_session,
     close_session,
     archive_session,
     unarchive_session,
